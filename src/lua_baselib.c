@@ -20,6 +20,7 @@
 #include "m_random.h"
 #include "s_sound.h"
 #include "g_game.h"
+#include "hu_stuff.h"	// HU_AddChatText
 
 #include "lua_script.h"
 #include "lua_libs.h"
@@ -82,6 +83,51 @@ static int lib_print(lua_State *L)
     lua_pop(L, 1);  /* pop result */
   }
 	CONS_Printf("\n");
+	return 0;
+}
+
+// Print stuff in the chat, or in the console if we can't.
+static int lib_chatprint(lua_State *L)
+{
+	const char *str = luaL_checkstring(L, 1);	// retrieve string
+	if (str == NULL)	// error if we don't have a string!
+		return luaL_error(L, LUA_QL("tostring") " must return a string to " LUA_QL("chatprint"));
+	int len = strlen(str);
+	if (len > 255)	// string is too long!!!
+		return luaL_error(L, "String exceeds the 255 characters limit of the chat buffer.");
+	
+	if (cv_consolechat.value || !netgame)
+		CONS_Printf("%s\n", str);
+	else
+		HU_AddChatText(str);
+	return 0;
+}
+
+// Same as above, but do it for only one player.
+static int lib_chatprintf(lua_State *L)
+{
+	int n = lua_gettop(L);  /* number of arguments */
+	player_t *plr;
+	if (n < 2)
+		return luaL_error(L, "chatprintf requires at least two arguments: player and text.");
+	
+	plr = *((player_t **)luaL_checkudata(L, 1, META_PLAYER));	// retrieve player
+	if (!plr)
+		return LUA_ErrInvalid(L, "player_t");
+	if (plr != &players[consoleplayer])
+		return 0;
+	
+	const char *str = luaL_checkstring(L, 2);	// retrieve string
+	if (str == NULL)	// error if we don't have a string!
+		return luaL_error(L, LUA_QL("tostring") " must return a string to " LUA_QL("chatprintf"));
+	int len = strlen(str);
+	if (len > 255)	// string is too long!!!
+		return luaL_error(L, "String exceeds the 255 characters limit of the chat buffer.");
+	
+	if (cv_consolechat.value || !netgame)
+		CONS_Printf("%s\n", str);
+	else
+		HU_AddChatText(str);
 	return 0;
 }
 
@@ -1982,6 +2028,8 @@ static int lib_gTicsToMilliseconds(lua_State *L)
 
 static luaL_Reg lib[] = {
 	{"print", lib_print},
+	{"chatprint", lib_chatprint},
+	{"chatprintf", lib_chatprintf},
 	{"EvalMath", lib_evalMath},
 
 	// m_random
